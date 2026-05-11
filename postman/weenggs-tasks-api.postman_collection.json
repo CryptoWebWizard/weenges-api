@@ -1,0 +1,872 @@
+{
+  "info": {
+    "name": "Weenggs Tasks API",
+    "_postman_id": "weenggs-tasks-api-collection",
+    "description": "Complete API collection for the Weenggs Tasks API (Express + TypeScript + PostgreSQL).\n\n**Base URL:** `http://localhost:3000` (change `baseUrl` variable for other environments)\n\n**How to use:**\n1. Run **Login** first — it auto-saves both `token` and `refreshToken` collection variables\n2. All Tasks requests automatically use `{{token}}`\n3. When the access token expires, run **Refresh Token** to get new tokens\n4. Run **Logout** to revoke the refresh token and end the session\n5. After creating a task, `taskId` is auto-saved for GET/PATCH/DELETE requests\n\n**Seed credentials:** `admin@test.com` / `secret123`\n\n**API version:** All endpoints under `/api/v1/`\n\n**Rate limits:**\n- Global: 100 requests / 15 minutes\n- Auth endpoints: 10 requests / 15 minutes\n\n**Headers on every response:**\n- `X-Request-ID` — unique ID for tracing this request in server logs",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string",
+      "description": "Base URL of the API server"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string",
+      "description": "JWT access token — auto-filled after Login. Valid for 8h by default."
+    },
+    {
+      "key": "refreshToken",
+      "value": "",
+      "type": "string",
+      "description": "Opaque refresh token — auto-filled after Login. Valid for 7 days. Use Refresh Token request to rotate."
+    },
+    {
+      "key": "taskId",
+      "value": "1",
+      "type": "string",
+      "description": "Task ID used for GET/PATCH/DELETE by ID — auto-saved after Create Task"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            },
+            "description": "Verify the server is running. Does not require authentication. Not rate-limited."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Returns ok status', function () {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.status).to.eql('ok');",
+                  "    pm.expect(json.timestamp).to.be.a('string');",
+                  "});",
+                  "pm.test('X-Request-ID header present', function () {",
+                  "    pm.expect(pm.response.headers.get('X-Request-ID')).to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                { "key": "Content-Type", "value": "application/json" },
+                { "key": "X-Request-ID", "value": "550e8400-e29b-41d4-a716-446655440000" }
+              ],
+              "body": "{\n  \"status\": \"ok\",\n  \"timestamp\": \"2026-05-11T15:00:00.000Z\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@test.com\",\n  \"password\": \"secret123\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "login"]
+            },
+            "description": "Authenticate with email and password.\n\nOn success, returns a short-lived **access token** (JWT, 8h) and a long-lived **refresh token** (opaque hex string, 7d). Both are automatically saved to collection variables.\n\n**Rate limited:** 10 requests / 15 minutes."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('success is true', function () {",
+                  "    pm.expect(pm.response.json().success).to.be.true;",
+                  "});",
+                  "pm.test('Response contains access token', function () {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.data.token).to.be.a('string');",
+                  "    pm.expect(json.data.token.length).to.be.above(0);",
+                  "});",
+                  "pm.test('Response contains refresh token', function () {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.data.refreshToken).to.be.a('string');",
+                  "    pm.expect(json.data.refreshToken.length).to.eql(64);",
+                  "});",
+                  "pm.test('User returned without password field', function () {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.data.user.email).to.eql('admin@test.com');",
+                  "    pm.expect(json.data.user.password).to.be.undefined;",
+                  "});",
+                  "// Auto-save both tokens",
+                  "var json = pm.response.json();",
+                  "if (json.data) {",
+                  "    if (json.data.token) {",
+                  "        pm.collectionVariables.set('token', json.data.token);",
+                  "        console.log('Access token saved');",
+                  "    }",
+                  "    if (json.data.refreshToken) {",
+                  "        pm.collectionVariables.set('refreshToken', json.data.refreshToken);",
+                  "        console.log('Refresh token saved');",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "200 Login Successful",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                { "key": "Content-Type", "value": "application/json" },
+                { "key": "X-Request-ID", "value": "550e8400-e29b-41d4-a716-446655440000" }
+              ],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Login successful\",\n  \"data\": {\n    \"token\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOjEsImVtYWlsIjoiYWRtaW5AdGVzdC5jb20ifQ...\",\n    \"refreshToken\": \"a3f1c2b9d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1\",\n    \"user\": {\n      \"id\": 1,\n      \"email\": \"admin@test.com\",\n      \"created_at\": \"2026-05-11T15:00:00.000Z\"\n    }\n  }\n}"
+            },
+            {
+              "name": "401 Invalid Credentials",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": false,\n  \"message\": \"Invalid email or password\"\n}"
+            },
+            {
+              "name": "400 Validation Error",
+              "status": "Bad Request",
+              "code": 400,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": false,\n  \"message\": \"Validation failed\",\n  \"errors\": [\n    {\n      \"type\": \"field\",\n      \"msg\": \"A valid email is required\",\n      \"path\": \"email\",\n      \"location\": \"body\"\n    }\n  ]\n}"
+            },
+            {
+              "name": "429 Rate Limited",
+              "status": "Too Many Requests",
+              "code": 429,
+              "header": [
+                { "key": "Content-Type", "value": "application/json" },
+                { "key": "Retry-After", "value": "900" }
+              ],
+              "body": "{\n  \"success\": false,\n  \"message\": \"Too many login attempts, please try again later.\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Refresh Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/refresh",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "refresh"]
+            },
+            "description": "Exchange a valid refresh token for a new access token + new refresh token.\n\nThe old refresh token is **revoked immediately** (token rotation). Store both new tokens — the old refresh token cannot be used again.\n\nUse this when the access token has expired (8h by default) without requiring the user to log in again.\n\n**Rate limited:** 10 requests / 15 minutes."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('New access token returned', function () {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.data.token).to.be.a('string');",
+                  "});",
+                  "pm.test('New refresh token returned', function () {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.data.refreshToken).to.be.a('string');",
+                  "    pm.expect(json.data.refreshToken.length).to.eql(64);",
+                  "});",
+                  "// Auto-save the new tokens",
+                  "var json = pm.response.json();",
+                  "if (json.data) {",
+                  "    if (json.data.token) pm.collectionVariables.set('token', json.data.token);",
+                  "    if (json.data.refreshToken) pm.collectionVariables.set('refreshToken', json.data.refreshToken);",
+                  "    console.log('Tokens rotated and saved');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "200 Tokens Refreshed",
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Token refreshed\",\n  \"data\": {\n    \"token\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.NEW_TOKEN...\",\n    \"refreshToken\": \"b7e9d4f1a2c3d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0\"\n  }\n}"
+            },
+            {
+              "name": "401 Invalid / Expired Refresh Token",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": false,\n  \"message\": \"Invalid or expired refresh token\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/logout",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "logout"]
+            },
+            "description": "Revoke the refresh token. The user is logged out — the refresh token can no longer be used to get new access tokens.\n\nThe current short-lived access token remains valid until it naturally expires (max 8h). For immediate full logout, implement an access token blocklist (future enhancement).\n\n**Rate limited:** 10 requests / 15 minutes."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('success is true', function () {",
+                  "    pm.expect(pm.response.json().success).to.be.true;",
+                  "});",
+                  "// Clear saved tokens",
+                  "pm.collectionVariables.set('token', '');",
+                  "pm.collectionVariables.set('refreshToken', '');",
+                  "console.log('Tokens cleared from collection variables');"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "200 Logged Out",
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Logged out successfully\",\n  \"data\": null\n}"
+            },
+            {
+              "name": "400 Validation Error",
+              "status": "Bad Request",
+              "code": 400,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": false,\n  \"message\": \"Validation failed\",\n  \"errors\": [\n    { \"type\": \"field\", \"msg\": \"refreshToken is required\", \"path\": \"refreshToken\", \"location\": \"body\" }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Login — Wrong Password",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@test.com\",\n  \"password\": \"wrongpassword\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "login"]
+            },
+            "description": "Demonstrates 401 when password is incorrect."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 401', function () { pm.response.to.have.status(401); });",
+                  "pm.test('success is false', function () { pm.expect(pm.response.json().success).to.be.false; });"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Login — Validation Error (missing email)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"password\": \"secret123\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "login"]
+            },
+            "description": "Demonstrates 400 validation error when email field is missing."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400', function () { pm.response.to.have.status(400); });",
+                  "pm.test('Returns validation errors', function () {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.errors).to.be.an('array');",
+                  "    pm.expect(json.errors.length).to.be.above(0);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Tasks",
+      "item": [
+        {
+          "name": "Get All Tasks",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "description": "JWT access token" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tasks?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "tasks"],
+              "query": [
+                { "key": "page", "value": "1", "description": "Page number (default: 1, min: 1)" },
+                { "key": "limit", "value": "10", "description": "Items per page (default: 10, max: 100)" }
+              ]
+            },
+            "description": "Retrieve a paginated list of all active (non-deleted) tasks.\n\n**Query params:**\n- `page` — page number, default 1\n- `limit` — items per page, default 10, max 100"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('success is true', function () { pm.expect(pm.response.json().success).to.be.true; });",
+                  "pm.test('Pagination fields present', function () {",
+                  "    var data = pm.response.json().data;",
+                  "    pm.expect(data).to.have.all.keys('data', 'total', 'page', 'limit', 'totalPages');",
+                  "});",
+                  "pm.test('data is an array', function () {",
+                  "    pm.expect(pm.response.json().data.data).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "200 Paginated Tasks",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                { "key": "Content-Type", "value": "application/json" },
+                { "key": "X-Request-ID", "value": "550e8400-e29b-41d4-a716-446655440000" }
+              ],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Success\",\n  \"data\": {\n    \"data\": [\n      {\n        \"id\": 1,\n        \"title\": \"Implement auth\",\n        \"description\": \"Add JWT authentication\",\n        \"status\": \"pending\",\n        \"completed_at\": null,\n        \"created_at\": \"2026-05-11T15:00:00.000Z\",\n        \"updated_at\": \"2026-05-11T15:00:00.000Z\"\n      }\n    ],\n    \"total\": 1,\n    \"page\": 1,\n    \"limit\": 10,\n    \"totalPages\": 1\n  }\n}"
+            },
+            {
+              "name": "401 Unauthorized",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": false,\n  \"message\": \"Authorization header missing or malformed\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get All Tasks — Page 2",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tasks?page=2&limit=5",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "tasks"],
+              "query": [
+                { "key": "page", "value": "2" },
+                { "key": "limit", "value": "5" }
+              ]
+            },
+            "description": "Demonstrates pagination — page 2, 5 items per page."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Page is 2', function () { pm.expect(pm.response.json().data.page).to.eql(2); });",
+                  "pm.test('Limit is 5', function () { pm.expect(pm.response.json().data.limit).to.eql(5); });"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Get Task by ID",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tasks/{{taskId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "tasks", "{{taskId}}"]
+            },
+            "description": "Fetch a single task by its numeric ID.\n\nSet the `taskId` collection variable to a real task ID."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200 or 404', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 404]);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "    pm.test('Task has required fields', function () {",
+                  "        var task = pm.response.json().data;",
+                  "        pm.expect(task).to.have.all.keys('id', 'title', 'description', 'status', 'completed_at', 'created_at', 'updated_at');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "200 Task Found",
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Success\",\n  \"data\": {\n    \"id\": 1,\n    \"title\": \"Implement auth\",\n    \"description\": \"Add JWT authentication\",\n    \"status\": \"pending\",\n    \"completed_at\": null,\n    \"created_at\": \"2026-05-11T15:00:00.000Z\",\n    \"updated_at\": \"2026-05-11T15:00:00.000Z\"\n  }\n}"
+            },
+            {
+              "name": "404 Not Found",
+              "status": "Not Found",
+              "code": 404,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": false,\n  \"message\": \"Task with id 999 not found\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Create Task",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Implement authentication\",\n  \"description\": \"Add JWT-based authentication to the API\",\n  \"status\": \"pending\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tasks",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "tasks"]
+            },
+            "description": "Create a new task.\n\n**Required:** `title` (string, max 255 chars)\n**Optional:**\n- `description` — string\n- `status` — `pending` | `in_progress` | `done` (default: `pending`)\n\nThe new task's `id` is automatically saved to the `taskId` variable."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 201', function () { pm.response.to.have.status(201); });",
+                  "pm.test('success is true', function () { pm.expect(pm.response.json().success).to.be.true; });",
+                  "pm.test('Created task has numeric id', function () {",
+                  "    pm.expect(pm.response.json().data.id).to.be.a('number');",
+                  "});",
+                  "pm.test('Title matches request', function () {",
+                  "    pm.expect(pm.response.json().data.title).to.eql('Implement authentication');",
+                  "});",
+                  "// Auto-save the new task's id",
+                  "var json = pm.response.json();",
+                  "if (json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('taskId', json.data.id);",
+                  "    console.log('taskId saved: ' + json.data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "201 Task Created",
+              "status": "Created",
+              "code": 201,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Task created successfully\",\n  \"data\": {\n    \"id\": 2,\n    \"title\": \"Implement authentication\",\n    \"description\": \"Add JWT-based authentication to the API\",\n    \"status\": \"pending\",\n    \"completed_at\": null,\n    \"created_at\": \"2026-05-11T15:05:00.000Z\",\n    \"updated_at\": \"2026-05-11T15:05:00.000Z\"\n  }\n}"
+            },
+            {
+              "name": "400 Validation Error (missing title)",
+              "status": "Bad Request",
+              "code": 400,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": false,\n  \"message\": \"Validation failed\",\n  \"errors\": [\n    { \"type\": \"field\", \"msg\": \"title is required\", \"path\": \"title\", \"location\": \"body\" }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Create Task — With status done",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Setup project structure\",\n  \"description\": \"Already completed before we started tracking\",\n  \"status\": \"done\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tasks",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "tasks"]
+            },
+            "description": "Creates a task with status `done`. `completed_at` is automatically set to the current timestamp."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 201', function () { pm.response.to.have.status(201); });",
+                  "pm.test('completed_at is set for done status', function () {",
+                  "    var task = pm.response.json().data;",
+                  "    pm.expect(task.status).to.eql('done');",
+                  "    pm.expect(task.completed_at).to.not.be.null;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Create Task — Validation Error (invalid status)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Some task\",\n  \"status\": \"not_a_valid_status\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tasks",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "tasks"]
+            },
+            "description": "Demonstrates 400 when an invalid status value is provided."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400', function () { pm.response.to.have.status(400); });",
+                  "pm.test('Returns validation errors', function () {",
+                  "    pm.expect(pm.response.json().errors).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Update Task",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Implement authentication (updated)\",\n  \"status\": \"in_progress\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tasks/{{taskId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "tasks", "{{taskId}}"]
+            },
+            "description": "Partially update a task — all body fields are optional, send only what changes.\n\n**Status transitions:**\n- `pending` / `in_progress` → `done`: `completed_at` is auto-set to NOW()\n- `done` → `pending` / `in_progress`: `completed_at` is auto-cleared to null"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200 or 404', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 404]);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "    pm.test('Task is updated', function () {",
+                  "        var task = pm.response.json().data;",
+                  "        pm.expect(task.title).to.eql('Implement authentication (updated)');",
+                  "        pm.expect(task.status).to.eql('in_progress');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "200 Task Updated",
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Task updated successfully\",\n  \"data\": {\n    \"id\": 2,\n    \"title\": \"Implement authentication (updated)\",\n    \"description\": \"Add JWT-based authentication to the API\",\n    \"status\": \"in_progress\",\n    \"completed_at\": null,\n    \"created_at\": \"2026-05-11T15:05:00.000Z\",\n    \"updated_at\": \"2026-05-11T15:10:00.000Z\"\n  }\n}"
+            },
+            {
+              "name": "404 Not Found",
+              "status": "Not Found",
+              "code": 404,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": false,\n  \"message\": \"Task with id 999 not found\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Update Task — Mark as Done",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"done\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tasks/{{taskId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "tasks", "{{taskId}}"]
+            },
+            "description": "Marks a task as done. `completed_at` is automatically set to NOW()."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    pm.test('Status is done', function () {",
+                  "        pm.expect(pm.response.json().data.status).to.eql('done');",
+                  "    });",
+                  "    pm.test('completed_at is set', function () {",
+                  "        pm.expect(pm.response.json().data.completed_at).to.not.be.null;",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Update Task — Reopen (back to in_progress)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"in_progress\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tasks/{{taskId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "tasks", "{{taskId}}"]
+            },
+            "description": "Changes status from `done` back to `in_progress`. `completed_at` is automatically cleared to null."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    pm.test('completed_at is cleared', function () {",
+                  "        pm.expect(pm.response.json().data.completed_at).to.be.null;",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Delete Task (Soft Delete)",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tasks/{{taskId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "tasks", "{{taskId}}"]
+            },
+            "description": "Soft-delete a task — sets `deleted_at` to NOW(). The row is NOT removed from the database.\n\nAfter deletion, the task will no longer appear in `GET /api/v1/tasks` or `GET /api/v1/tasks/:id`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200 or 404', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 404]);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "    pm.test('success is true', function () {",
+                  "        pm.expect(pm.response.json().success).to.be.true;",
+                  "    });",
+                  "    pm.test('Message mentions deleted', function () {",
+                  "        pm.expect(pm.response.json().message).to.include('deleted');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "200 Task Deleted",
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Task deleted successfully\",\n  \"data\": null\n}"
+            },
+            {
+              "name": "404 Not Found",
+              "status": "Not Found",
+              "code": 404,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": false,\n  \"message\": \"Task with id 999 not found\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Tasks — No Token (401)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tasks",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "tasks"]
+            },
+            "description": "Demonstrates 401 when Authorization header is missing."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 401', function () { pm.response.to.have.status(401); });",
+                  "pm.test('success is false', function () { pm.expect(pm.response.json().success).to.be.false; });"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "401 Unauthorized",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": false,\n  \"message\": \"Authorization header missing or malformed\"\n}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
