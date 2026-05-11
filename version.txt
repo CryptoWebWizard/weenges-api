@@ -1,0 +1,43 @@
+Weenggs Tasks API — Stack Versions
+====================================
+
+Runtime
+-------
+Node.js        : v22.16.0  (runtime / Docker image: node:20-alpine)
+
+Language
+--------
+TypeScript     : ^5.5.3
+
+Database
+--------
+PostgreSQL     : 16 (Docker image: postgres:16-alpine)
+pg (node-postgres) : ^8.12.0
+
+Framework & Core Libraries
+--------------------------
+Express        : ^4.19.2
+express-validator : ^7.1.0
+express-rate-limit : ^8.5.1
+
+Auth
+----
+jsonwebtoken   : ^9.0.2
+bcryptjs       : ^2.4.3
+
+Docs
+----
+swagger-jsdoc  : ^6.2.8
+swagger-ui-express : ^5.0.1
+
+Logging & Security
+------------------
+winston        : ^3.19.0
+helmet         : ^8.1.0
+cors           : ^2.8.5
+
+Testing
+-------
+jest           : ^29.7.0
+ts-jest        : ^29.2.3
+supertest      : ^7.0.0
